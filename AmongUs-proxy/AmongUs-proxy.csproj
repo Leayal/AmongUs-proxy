@@ -6,6 +6,7 @@
     <Company>Dramiel Leayal</Company>
     <Description>Leayal's proxy for game Among Us</Description>
     <Authors>Dramiel Leayal</Authors>
+    <Copyright>Dramiel Leayal</Copyright>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">

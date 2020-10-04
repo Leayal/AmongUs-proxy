@@ -72,11 +72,17 @@ namespace AmongUs_proxy.GUI
                             this.groupBoxHost.Visible = true;
                             this.button5.Visible = true;
                             this.button5.Enabled = true;
+                            this.comboBox1.Enabled = true;
+                            this.numericUpDown1.Enabled = true;
+                            this.textBox2.Enabled = true;
                             this.button1.Text = "Start the proxy server";
                             break;
                         case UIState.HostStarting:
                             this.button1.Enabled = false;
                             this.button5.Enabled = false;
+                            this.comboBox1.Enabled = false;
+                            this.numericUpDown1.Enabled = false;
+                            this.textBox2.Enabled = false;
                             this.button1.Text = "Starting the proxy";
                             break;
                         case UIState.HostStarted:
@@ -101,11 +107,13 @@ namespace AmongUs_proxy.GUI
                             this.groupBoxClient.Visible = true;
                             this.button5.Visible = true;
                             this.button5.Enabled = true;
+                            this.textBox1.Enabled = true;
                             this.button2.Text = "Connect to the proxy server";
                             break;
                         case UIState.ClientConnecting:
                             this.button2.Enabled = false;
                             this.button5.Enabled = false;
+                            this.textBox1.Enabled = false;
                             this.button2.Text = "Connecting to the proxy server";
                             break;
                         case UIState.ClientConnected:
@@ -123,7 +131,7 @@ namespace AmongUs_proxy.GUI
             }
         }
 
-        private void button1_Click(object sender, EventArgs e)
+        private async void button1_Click(object sender, EventArgs e)
         {
             switch (this._uistate)
             {
@@ -151,26 +159,33 @@ namespace AmongUs_proxy.GUI
                             return;
                         }
                     }
+                    var task_gettingPulicIP = GetPublicIPAddress();
                     this.hosting.GameName = roomName;
                     this.State = UIState.HostStarting;
+                    this.labelStatusHost.Text = $"Starting proxy server is hosted on port {this.numericUpDown1.Value}";
                     try
                     {
-                        this.hosting.Start(bindHost, (int)this.numericUpDown1.Value).Dispose();
+                        _ = this.hosting.Start(bindHost, (int)this.numericUpDown1.Value);
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         this.State = UIState.HostReady;
+                        this.labelStatusHost.Text = "Ready";
                         return;
                     }
+                    var publicIP = await task_gettingPulicIP;
                     this.State = UIState.HostStarted;
+                    this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
                     break;
                 case UIState.HostStarted:
                     if (this.hosting != null)
                     {
                         this.State = UIState.HostStopping;
+                        this.labelStatusHost.Text = $"Stopping the proxy server.";
                         this.hosting.Stop();
                         this.State = UIState.HostReady;
+                        this.labelStatusHost.Text = "Ready";
                     }
                     break;
             }
@@ -205,6 +220,7 @@ namespace AmongUs_proxy.GUI
                         return;
                     }
                     this.State = UIState.ClientConnecting;
+                    this.labelStatusClient.Text = $"Connecting to {ipAddr}:{portAddr}";
                     Connection connection = null;
                     try
                     {
@@ -216,20 +232,25 @@ namespace AmongUs_proxy.GUI
                         {
                             connection.Dispose();
                         }
+                        this.labelStatusClient.Text = $"Failed to connect to {ipAddr}:{portAddr}";
                         MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         this.State = UIState.ClientReady;
+                        this.labelStatusClient.Text = "Ready";
                         return;
                     }
                     _ = connection.UntilTermination().ContinueWith((t) => connection.Dispose());
                     this.client = connection;
                     this.State = UIState.ClientConnected;
+                    this.labelStatusClient.Text = $"You are connected to {ipAddr}:{portAddr}";
                     break;
                 case UIState.ClientConnected:
                     if (this.client != null)
                     {
                         this.State = UIState.ClientDisconnecting;
+                        this.labelStatusClient.Text = "Disconnecting from the server";
                         this.client.Dispose();
                         this.State = UIState.ClientReady;
+                        this.labelStatusClient.Text = "Ready";
                     }
                     break;
             }
@@ -261,6 +282,53 @@ namespace AmongUs_proxy.GUI
         private void button5_Click(object sender, EventArgs e)
         {
             this.State = UIState.None;
+        }
+
+        private static async Task<string> GetPublicIPAddress()
+        {
+            var request = HttpWebRequest.CreateHttp("https://ipv4.icanhazip.com/");
+            {
+                request.Method = "GET";
+                request.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+                request.Timeout = 5000;
+                request.ContentLength = 0;
+                request.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:81.0) Gecko/20100101 Firefox/81.0";
+                request.Accept = "text/plain";
+                request.AllowAutoRedirect = false;
+                request.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
+                request.KeepAlive = false;
+                request.UseDefaultCredentials = false;
+                request.Proxy = null;
+                using (var response = (HttpWebResponse)(await request.GetResponseAsync()))
+                {
+                    if (response.StatusCode == HttpStatusCode.OK)
+                    {
+                        using (var stream = response.GetResponseStream())
+                        {
+                            var length = response.ContentLength;
+                            if (length > 0 && length < int.MaxValue)
+                            {
+                                var buffer = new byte[response.ContentLength];
+                                var readbyte = await stream.ReadAsync(buffer, 0, buffer.Length);
+                                if (readbyte == buffer.Length)
+                                {
+                                    var str = Encoding.UTF8.GetString(buffer);
+                                    return str.Trim();
+                                }
+                            }
+                            else
+                            {
+                                using (var sr = new StreamReader(stream, Encoding.UTF8))
+                                {
+                                    var str = await sr.ReadToEndAsync();
+                                    return str.Trim();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return null;
         }
     }
 }
