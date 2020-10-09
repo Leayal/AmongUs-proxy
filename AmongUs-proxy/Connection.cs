@@ -11,10 +11,11 @@ namespace AmongUs_proxy
 {
     public sealed class Connection : IDisposable
     {
-        private CancellationTokenSource cancelSrc;
-        private TaskCompletionSource<Connection> task_ReceivingBroadcast;
         internal static readonly byte[] BroadcastHandshake;
-
+        private UdpTunnel gameTunnel;
+        private TcpClient _client;
+        private TaskCompletionSource<Connection> taskSrc;
+        
         static Connection()
         {
             var signature = Encoding.ASCII.GetBytes("leayal-amongus-proxy");
@@ -25,16 +26,18 @@ namespace AmongUs_proxy
 
         internal Connection(TcpClient tcpClient)
         {
-            this.cancelSrc = new CancellationTokenSource();
-            this.task_ReceivingBroadcast = new TaskCompletionSource<Connection>();
+            this.taskSrc = new TaskCompletionSource<Connection>();
+            this._client = tcpClient;
             Task.Factory.StartNew(async (obj) =>
             {
                 using (var client = (TcpClient)obj)
                 using (var broadcaster = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0)))
                 using (var networkStream = client.GetStream())
                 {
+                    networkStream.ReadTimeout = 5000;
+                    networkStream.WriteTimeout = 5000;
                     broadcaster.Connect(IPAddress.Broadcast.ToString(), 47777);
-                    
+
                     // 4096 bytes should be enough??
                     byte[] buffer = new byte[4096];
                     using (var bufferStream = new MemoryStream())
@@ -44,11 +47,11 @@ namespace AmongUs_proxy
                         if (readLen == sizeof(int) && (BitConverter.ToInt32(buffer, 0) == (int)MessageID.OK))
                         {
                             var destination = (IPEndPoint)tcpClient.Client.RemoteEndPoint;
-                            var gameTunnel = new UdpTunnel(new IPEndPoint(IPAddress.Loopback, AmongUs.ServerPort), destination);
+                            this.gameTunnel = new UdpTunnel(new IPEndPoint(IPAddress.Loopback, AmongUs.ServerPort), destination);
                             try
                             {
                                 gameTunnel.Start();
-                                while (!this.cancelSrc.IsCancellationRequested)
+                                while (this._client.Connected)
                                 {
                                     buffer.WriteBytes((int)MessageID.Broadcast, 0);
                                     await networkStream.WriteAsync(buffer, 0, sizeof(int));
@@ -70,27 +73,32 @@ namespace AmongUs_proxy
                                     await Task.Delay(100);
                                 }
                             }
+                            catch (Exception ex) when (!(ex is ObjectDisposedException))
+                            {
+                                this.taskSrc.TrySetException(ex);
+                            }
                             finally
                             {
                                 gameTunnel.Stop();
                             }
+                            this.taskSrc.TrySetResult(this);
                         }
                     }
                     broadcaster.Close();
                     client.Close();
+                    this.taskSrc.TrySetCanceled();
                 }
-                this.task_ReceivingBroadcast.TrySetResult(this);
-            }, tcpClient, this.cancelSrc.Token, TaskCreationOptions.LongRunning, TaskScheduler.Current ?? TaskScheduler.Default);
+            }, tcpClient, TaskCreationOptions.LongRunning);
         }
 
-        public Task UntilTermination()
-        {
-            return this.task_ReceivingBroadcast.Task;
-        }
+        public Task<Connection> WhenConnectionTerminated() => this.taskSrc.Task;
 
         public void Dispose()
         {
-            this.task_ReceivingBroadcast.TrySetCanceled();
+            if (this._client != null)
+            {
+                this._client.Close();
+            }
         }
     }
 }

@@ -12,12 +12,11 @@ namespace AmongUs_proxy
 {
     public class Host
     {
-        private static int endingLength = Encoding.UTF8.GetByteCount("~");
         private UdpTunnel gameTunnel;
         private bool _isRunning;
-        private TaskCompletionSource<byte> runningTask;
         private UdpClient broadcastListener;
-
+        private TcpListener broadcastRelay;
+        private bool _firstStart;
 
         /// <summary>
         /// [4][2][${RoomName}][~Open~${users}~]
@@ -28,6 +27,7 @@ namespace AmongUs_proxy
         public Host()
         {
             this._isRunning = false;
+            this._firstStart = true;
             this._game_name = "LeaAmongUsProxy"; // string.Empty;
             this._player_count = 0;
             this.broadcastListener = new UdpClient();
@@ -44,26 +44,28 @@ namespace AmongUs_proxy
             }
         }
 
-        public Task Start(string localIp, int localPort)
+        public void Start(string localIp, int localPort)
         {
-            if (this._isRunning) return this.runningTask.Task;
+            if (this._isRunning) return;
             if (!IPAddress.TryParse(localIp, out var validIp))
             {
                 throw new ArgumentException("Provided IPAddress is not valid.", nameof(localIp));
             }
             else if (localPort < 0 || localPort > ushort.MaxValue)
             {
-                throw new ArgumentOutOfRangeException(nameof(localIp), "Provided Port is not valid.");
+                throw new ArgumentOutOfRangeException(nameof(localPort), "Provided Port is not valid.");
             }
             this._isRunning = true;
-            this.runningTask = new TaskCompletionSource<byte>();
-            var broadcastRelay = new TcpListener(validIp, localPort);
-            broadcastRelay.Start();
-            broadcastRelay.BeginAcceptTcpClient(this.AcceptingTcpClient, broadcastRelay);
-            this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
+            this.broadcastRelay = new TcpListener(validIp, localPort);
+            this.broadcastRelay.Start();
+            this.broadcastRelay.BeginAcceptTcpClient(this.AcceptingTcpClient, broadcastRelay);
+            if (this._firstStart)
+            {
+                this._firstStart = false;
+                this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
+            }
             this.gameTunnel = new UdpTunnel((IPEndPoint)broadcastRelay.LocalEndpoint, new IPEndPoint(Constants.LanIP, AmongUs.ServerPort));
             this.gameTunnel.Start();
-            return this.runningTask.Task;
         }
 
         private async void ListeningForBroadcast(IAsyncResult ar)
@@ -90,7 +92,16 @@ namespace AmongUs_proxy
         private void AcceptingTcpClient(IAsyncResult ar)
         {
             var listener = (TcpListener)ar.AsyncState;
-            var tcpClient = listener.EndAcceptTcpClient(ar);
+            TcpClient tcpClient;
+            try
+            {
+                tcpClient = listener.EndAcceptTcpClient(ar);
+            }
+            catch (ObjectDisposedException)
+            {
+                // listener.Stop();
+                return;
+            }
             this.HandleIncomingHandshake(listener, tcpClient);
             listener.BeginAcceptTcpClient(this.AcceptingTcpClient, listener);
         }
@@ -104,48 +115,51 @@ namespace AmongUs_proxy
                     var buffer = new byte[4096];
                     using (var networkStream = tcpClient.GetStream())
                     {
-                        int read = await networkStream.ReadAsync(buffer, 0, buffer.Length);
-                        var handshakeMessage = new byte[read];
-                        Buffer.BlockCopy(buffer, 0, handshakeMessage, 0, read);
-                        if (!Connection.BroadcastHandshake.UnsafeCompare(handshakeMessage))
+                        try
                         {
-                            return;
-                        }
-                        Interlocked.Increment(ref this._player_count);
-                        buffer.WriteBytes((int)MessageID.OK, 0);
-                        await networkStream.WriteAsync(buffer, 0, sizeof(int));
-
-                        while (this._isRunning)
-                        {
-                            read = await networkStream.ReadAsync(buffer, 0, buffer.Length);
-                            if (read == sizeof(uint))
+                            int read = await networkStream.ReadAsync(buffer, 0, buffer.Length);
+                            var handshakeMessage = new byte[read];
+                            Buffer.BlockCopy(buffer, 0, handshakeMessage, 0, read);
+                            if (!Connection.BroadcastHandshake.UnsafeCompare(handshakeMessage))
                             {
-                                switch ((MessageID)buffer.ReadUInt16(0))
+                                return;
+                            }
+                            buffer.WriteBytes((int)MessageID.OK, 0);
+                            await networkStream.WriteAsync(buffer, 0, sizeof(int));
+
+                            while (this._isRunning)
+                            {
+                                read = await networkStream.ReadAsync(buffer, 0, buffer.Length);
+                                if (read == sizeof(uint))
                                 {
-                                    case MessageID.Handshake:
-                                        break;
-                                    case MessageID.Broadcast:
-                                        using (var mem = new MemoryStream(buffer))
-                                        using (var bw = new BinaryWriter(mem))
-                                        {
-                                            mem.Position = 0;
-                                            mem.SetLength(0);
-                                            bw.Write(Encoding.UTF8.GetBytes(this._game_name));
-                                            bw.Write((ushort)(Interlocked.Read(ref this._player_count)));
-                                            bw.Flush();
-                                            await networkStream.WriteAsync(buffer, 0, (int)mem.Length);
-                                        }
-                                        break;
-                                    default:
-                                        break;
+                                    switch ((MessageID)buffer.ReadUInt16(0))
+                                    {
+                                        case MessageID.Handshake:
+                                            break;
+                                        case MessageID.Broadcast:
+                                            using (var mem = new MemoryStream(buffer))
+                                            using (var bw = new BinaryWriter(mem))
+                                            {
+                                                mem.Position = 0;
+                                                mem.SetLength(0);
+                                                bw.Write(Encoding.UTF8.GetBytes(this._game_name));
+                                                bw.Write((ushort)(Interlocked.Read(ref this._player_count)));
+                                                bw.Flush();
+                                                await networkStream.WriteAsync(buffer, 0, (int)mem.Length);
+                                            }
+                                            break;
+                                        default:
+                                            break;
+                                    }
                                 }
                             }
                         }
-                        Interlocked.Decrement(ref this._player_count);
+                        finally
+                        {
+                            tcpClient.Close();
+                        }
                     }
-                    tcpClient.Close();
                 }
-                this.runningTask.TrySetResult(1);
             }, client, TaskCreationOptions.LongRunning);
         }
         
@@ -154,7 +168,7 @@ namespace AmongUs_proxy
             if (!this._isRunning) return;
             this._isRunning = false;
             this.gameTunnel.Stop();
-            this.runningTask.TrySetCanceled();
+            this.broadcastRelay.Stop();
         }
     }
 }

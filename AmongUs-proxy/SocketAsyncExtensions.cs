@@ -6,7 +6,7 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace AmongUs_proxy
+namespace AmongUs_proxy.Sockets
 {
     static class SocketAsyncExtensions
     {
@@ -47,7 +47,7 @@ namespace AmongUs_proxy
         private static void ReceiveFromCallback(IAsyncResult ar)
         {
             var objs = (object[])ar.AsyncState;
-            var taskSrc = (TaskCompletionSource<int>)(objs[1]);
+            var taskSrc = (TaskCompletionSource<int>)(objs[0]);
             var socket = (Socket)(objs[1]);
             var endPoint = (EndPoint)(objs[2]);
             try
@@ -89,7 +89,7 @@ namespace AmongUs_proxy
         private static void SendToCallback(IAsyncResult ar)
         {
             var objs = (object[])ar.AsyncState;
-            var taskSrc = (TaskCompletionSource<int>)(objs[1]);
+            var taskSrc = (TaskCompletionSource<int>)(objs[0]);
             var socket = (Socket)(objs[1]);
             try
             {
@@ -130,9 +130,8 @@ namespace AmongUs_proxy
         private static void ReceiveCallback(IAsyncResult ar)
         {
             var objs = (object[])ar.AsyncState;
-            var taskSrc = (TaskCompletionSource<int>)(objs[1]);
+            var taskSrc = (TaskCompletionSource<int>)(objs[0]);
             var socket = (Socket)(objs[1]);
-            var endPoint = (EndPoint)(objs[2]);
             try
             {
                 var receivedSize = socket.EndReceive(ar);

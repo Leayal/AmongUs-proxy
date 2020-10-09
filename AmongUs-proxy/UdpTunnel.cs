@@ -12,8 +12,8 @@ namespace AmongUs_proxy
     {
         private IPEndPoint _from, _to;
         private bool _isRunning;
-        private CancellationTokenSource cancelSrc;
-        
+        private UdpClient m_UdpSendSocket = null, m_UdpListenSocket = null;
+
         public UdpTunnel(IPEndPoint from, IPEndPoint to)
         {
             this._from = from;
@@ -25,11 +25,6 @@ namespace AmongUs_proxy
         {
             if (this._isRunning) return;
             this._isRunning = true;
-            if (this.cancelSrc != null)
-            {
-                this.cancelSrc.Dispose();
-            }
-            this.cancelSrc = new CancellationTokenSource();
             this.CreateTunnelAndRun();
         }
 
@@ -37,44 +32,42 @@ namespace AmongUs_proxy
         {
             Task.Factory.StartNew(async () =>
             {
-                var token = this.cancelSrc.Token;
-                token.Register(this.cancelSrc.Cancel);
-                EndPoint m_connectedClientEp = null;
-                Socket m_UdpSendSocket = null, m_UdpListenSocket = null;
+                IPEndPoint m_connectedClientEp = null;
 
                 try
                 {
-                    m_UdpListenSocket = new Socket(this._from.Address.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
-                    m_UdpListenSocket.Bind(this._from);
+                    m_UdpListenSocket = new UdpClient(this._from);
+                    // m_UdpListenSocket = new Socket(this._from.Address.AddressFamily, SocketType.Dgram, ProtocolType.Udp);
+                    // m_UdpListenSocket.Bind(this._from);
 
                     //Connect to zone IP EndPoint
                     m_connectedClientEp = this._from;
-
-                    // hardcoded buffer size
-                    byte[] buffer_in = new byte[1024 * 8],
-                        buffer_out = new byte[1024 * 8];
 
                     while (this._isRunning)
                     {
                         if (m_UdpListenSocket.Available > 0)
                         {
-                            int size = await m_UdpListenSocket.ReceiveFromAsync(buffer_in, ref m_connectedClientEp, token); //client to listener
+                            var result = await m_UdpListenSocket.ReceiveAsync();
+                            // var result = await m_UdpListenSocket.ReceiveFromAsync(segment1, SocketFlags.None, m_connectedClientEp); //client to listener
+                            // result.ReceivedBytes
+                            // result.RemoteEndPoint
+                            m_connectedClientEp = result.RemoteEndPoint;
 
                             if (m_UdpSendSocket == null)
                             {
                                 // Connect to UDP Game Server.
-                                m_UdpSendSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                                // m_UdpSendSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+                                m_UdpSendSocket = new UdpClient();
                             }
-
-                            await m_UdpSendSocket.SendToAsync(buffer_in, 0, size, SocketFlags.None, this._to, token); //listener to server.
+                            await m_UdpSendSocket.SendAsync(result.Buffer, result.Buffer.Length, this._to); //listener to server.
 
                         }
 
                         if (m_UdpSendSocket != null && m_UdpSendSocket.Available > 0)
                         {
-                            int size = await m_UdpSendSocket.ReceiveAsync(buffer_out, token); //server to client.
-
-                            await m_UdpListenSocket.SendToAsync(buffer_out, 0, size, SocketFlags.None, m_connectedClientEp, token); //listner
+                            var result = await m_UdpSendSocket.ReceiveAsync(); //server to client.
+                            await m_UdpListenSocket.SendAsync(result.Buffer, result.Buffer.Length, m_connectedClientEp);
+                            // m_UdpListenSocket.SendTo(buffer2, size, SocketFlags.None, m_connectedClientEp); //listner
 
                         }
                     }
@@ -99,19 +92,21 @@ namespace AmongUs_proxy
         {
             if (!this._isRunning) return;
             this._isRunning = false;
-            this.cancelSrc.Cancel();
+            if (m_UdpSendSocket != null)
+            {
+                m_UdpSendSocket.Close();
+                m_UdpSendSocket.Dispose();
+            }
+            if (m_UdpListenSocket != null)
+            {
+                m_UdpListenSocket.Close();
+                m_UdpListenSocket.Dispose();
+            }
         }
 
         public void Dispose()
         {
-            if (this._isRunning)
-            {
-                this.cancelSrc.Cancel();
-            }
-            else if (this.cancelSrc != null)
-            {
-                this.cancelSrc.Dispose();
-            }
+            this.Stop();
         }
     }
 }

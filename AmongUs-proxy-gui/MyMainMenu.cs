@@ -165,7 +165,7 @@ namespace AmongUs_proxy.GUI
                     this.labelStatusHost.Text = $"Starting proxy server is hosted on port {this.numericUpDown1.Value}";
                     try
                     {
-                        _ = this.hosting.Start(bindHost, (int)this.numericUpDown1.Value);
+                        this.hosting.Start(bindHost, (int)this.numericUpDown1.Value);
                     }
                     catch (Exception ex)
                     {
@@ -174,9 +174,17 @@ namespace AmongUs_proxy.GUI
                         this.labelStatusHost.Text = "Ready";
                         return;
                     }
-                    var publicIP = await task_gettingPulicIP;
-                    this.State = UIState.HostStarted;
-                    this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
+                    try
+                    {
+                        var publicIP = await task_gettingPulicIP;
+                        this.State = UIState.HostStarted;
+                        this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
+                    }
+                    catch (WebException ex)
+                    {
+                        this.State = UIState.HostStarted;
+                        this.labelStatusHost.Text = $"To connect to your server: ???.???.???.???:{this.numericUpDown1.Value}";
+                    }
                     break;
                 case UIState.HostStarted:
                     if (this.hosting != null)
@@ -203,7 +211,7 @@ namespace AmongUs_proxy.GUI
                         return;
                     }
                     var portIndex = text.IndexOf(':');
-                    if (portIndex != -1)
+                    if (portIndex == -1)
                     {
                         // Enforce port to be specified.
                         MessageBox.Show(this, "Please specify destination port.\nFormat: <host/IP>:<port number>.\nEx: 192.168.1.1:6969", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -238,10 +246,30 @@ namespace AmongUs_proxy.GUI
                         this.labelStatusClient.Text = "Ready";
                         return;
                     }
-                    _ = connection.UntilTermination().ContinueWith((t) => connection.Dispose());
                     this.client = connection;
                     this.State = UIState.ClientConnected;
                     this.labelStatusClient.Text = $"You are connected to {ipAddr}:{portAddr}";
+                    _ = connection.WhenConnectionTerminated().ContinueWith(t =>
+                    {
+                        Exception realEx;
+                        if (t.Exception is AggregateException aggregate)
+                        {
+                            realEx = aggregate.InnerException;
+                        }
+                        else
+                        {
+                            realEx = t.Exception;
+                        }
+                        this.BeginInvoke(new ActionNoParam((ex) =>
+                        {
+                            if (ex != null)
+                            {
+                                MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            }
+                            this.State = UIState.ClientReady;
+                            this.labelStatusClient.Text = "Ready";
+                        }), realEx);
+                    });
                     break;
                 case UIState.ClientConnected:
                     if (this.client != null)
@@ -255,6 +283,8 @@ namespace AmongUs_proxy.GUI
                     break;
             }
         }
+
+        private delegate void ActionNoParam(Exception ex);
 
         private async void MyMainMenu_Shown(object sender, EventArgs e)
         {
