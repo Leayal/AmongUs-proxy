@@ -45,6 +45,7 @@
             this.button3 = new System.Windows.Forms.Button();
             this.button4 = new System.Windows.Forms.Button();
             this.button5 = new System.Windows.Forms.Button();
+            this.checkBox1 = new System.Windows.Forms.CheckBox();
             this.groupBoxHost.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown1)).BeginInit();
             this.groupBoxClient.SuspendLayout();
@@ -79,6 +80,7 @@
             // 
             // groupBoxHost
             // 
+            this.groupBoxHost.Controls.Add(this.checkBox1);
             this.groupBoxHost.Controls.Add(this.labelStatusHost);
             this.groupBoxHost.Controls.Add(this.label2);
             this.groupBoxHost.Controls.Add(this.textBox2);
@@ -221,6 +223,18 @@
             this.button5.Visible = false;
             this.button5.Click += new System.EventHandler(this.button5_Click);
             // 
+            // checkBox1
+            // 
+            this.checkBox1.AutoSize = true;
+            this.checkBox1.Checked = true;
+            this.checkBox1.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBox1.Location = new System.Drawing.Point(200, 106);
+            this.checkBox1.Name = "checkBox1";
+            this.checkBox1.Size = new System.Drawing.Size(104, 19);
+            this.checkBox1.TabIndex = 10;
+            this.checkBox1.Text = "Show public IP";
+            this.checkBox1.UseVisualStyleBackColor = true;
+            // 
             // MyMainMenu
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
@@ -266,6 +280,7 @@
         private System.Windows.Forms.Button button3;
         private System.Windows.Forms.Button button4;
         private System.Windows.Forms.Button button5;
+        private System.Windows.Forms.CheckBox checkBox1;
     }
 }
 

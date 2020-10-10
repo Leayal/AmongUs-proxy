@@ -10,8 +10,27 @@ using System.Threading;
 
 namespace AmongUs_proxy
 {
-    public class Host
+    public sealed class Host
     {
+        internal static readonly byte[] BroadcastHandshake;
+
+        static Host()
+        {
+            var handshakeSignature = "leayal-amongus-proxy";
+            var length = Encoding.ASCII.GetByteCount(handshakeSignature);
+            BroadcastHandshake = new byte[length + 1];
+            var encodedLen = Encoding.ASCII.GetBytes(handshakeSignature, 0, handshakeSignature.Length, BroadcastHandshake, 0);
+
+            // Unlikely to be happen, but just to be safe
+            if (encodedLen != (BroadcastHandshake.Length - 1))
+            {
+                var swapBuffer = new byte[encodedLen + 1];
+                Buffer.BlockCopy(BroadcastHandshake, 0, swapBuffer, 0, encodedLen);
+                BroadcastHandshake = swapBuffer;
+            }
+            // Yes, last byte is \0
+        }
+
         private UdpTunnel gameTunnel;
         private bool _isRunning;
         private UdpClient broadcastListener;
@@ -120,7 +139,7 @@ namespace AmongUs_proxy
                             int read = await networkStream.ReadAsync(buffer, 0, buffer.Length);
                             var handshakeMessage = new byte[read];
                             Buffer.BlockCopy(buffer, 0, handshakeMessage, 0, read);
-                            if (!Connection.BroadcastHandshake.UnsafeCompare(handshakeMessage))
+                            if (!BroadcastHandshake.UnsafeCompare(handshakeMessage))
                             {
                                 return;
                             }

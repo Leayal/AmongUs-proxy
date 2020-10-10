@@ -29,9 +29,10 @@ namespace AmongUs_proxy.GUI
                 this.ShutdownStyle = ShutdownMode.AfterMainFormCloses;
             }
 
-            protected override void OnCreateMainForm()
+            protected override bool OnStartup(StartupEventArgs eventArgs)
             {
                 this.MainForm = new MyMainMenu();
+                return base.OnStartup(eventArgs);
             }
         }
     }

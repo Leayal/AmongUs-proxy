@@ -16,14 +16,13 @@ namespace AmongUs_proxy.GUI
 {
     public partial class MyMainMenu : Form
     {
-        private static readonly Task<IPAddress[]> task_fetchingLANIP;
+        private static readonly Task<string[]> task_fetchingLANIP;
         static MyMainMenu()
         {
-
-            task_fetchingLANIP = Task.Run<IPAddress[]>(() =>
+            task_fetchingLANIP = Task.Run<string[]>(() =>
             {
                 var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
-                var result = new List<IPAddress>(networkInterfaces.Length);
+                var result = new List<string>(networkInterfaces.Length);
                 // In case the LAN is in another network.
                 foreach (var networkinterface in networkInterfaces)
                 {
@@ -35,7 +34,7 @@ namespace AmongUs_proxy.GUI
                             {
                                 if (ip.Address.AddressFamily == AddressFamily.InterNetwork)
                                 {
-                                    result.Add(ip.Address);
+                                    result.Add(ip.Address.ToString());
                                 }
                             }
                         }
@@ -47,7 +46,7 @@ namespace AmongUs_proxy.GUI
 
         private UIState _uistate;
         private Host hosting;
-        private Connection client;
+        private Client client;
 
         public MyMainMenu()
         {
@@ -75,6 +74,7 @@ namespace AmongUs_proxy.GUI
                             this.comboBox1.Enabled = true;
                             this.numericUpDown1.Enabled = true;
                             this.textBox2.Enabled = true;
+                            this.checkBox1.Visible = true;
                             this.button1.Text = "Start the proxy server";
                             break;
                         case UIState.HostStarting:
@@ -83,16 +83,19 @@ namespace AmongUs_proxy.GUI
                             this.comboBox1.Enabled = false;
                             this.numericUpDown1.Enabled = false;
                             this.textBox2.Enabled = false;
+                            this.checkBox1.Visible = false;
                             this.button1.Text = "Starting the proxy";
                             break;
                         case UIState.HostStarted:
                             this.button1.Enabled = true;
                             this.button5.Enabled = false;
+                            this.checkBox1.Visible = false;
                             this.button1.Text = "Stop the proxy server";
                             break;
                         case UIState.HostStopping:
                             this.button1.Enabled = false;
                             this.button5.Enabled = false;
+                            this.checkBox1.Visible = false;
                             this.button1.Text = "Stopping the proxy server";
                             break;
 
@@ -137,10 +140,17 @@ namespace AmongUs_proxy.GUI
             {
                 case UIState.HostReady:
                     var bindHost = this.comboBox1.Text;
-                    if (!IPAddress.TryParse(bindHost, out _))
+                    if (string.Equals(bindHost, (string)(this.comboBox1.Items[0]), StringComparison.OrdinalIgnoreCase))
                     {
-                        MessageBox.Show(this, "Invalid IP Address.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
+                        bindHost = IPAddress.Any.ToString();
+                    }
+                    else
+                    {
+                        if (!IPAddress.TryParse(bindHost, out _))
+                        {
+                            MessageBox.Show(this, "Invalid IP Address.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
                     }
                     if (this.hosting == null)
                     {
@@ -159,7 +169,6 @@ namespace AmongUs_proxy.GUI
                             return;
                         }
                     }
-                    var task_gettingPulicIP = GetPublicIPAddress();
                     this.hosting.GameName = roomName;
                     this.State = UIState.HostStarting;
                     this.labelStatusHost.Text = $"Starting proxy server is hosted on port {this.numericUpDown1.Value}";
@@ -174,13 +183,21 @@ namespace AmongUs_proxy.GUI
                         this.labelStatusHost.Text = "Ready";
                         return;
                     }
-                    try
+                    if (this.checkBox1.Checked)
                     {
-                        var publicIP = await task_gettingPulicIP;
-                        this.State = UIState.HostStarted;
-                        this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
+                        try
+                        {
+                            var publicIP = await GetPublicIPAddress();
+                            this.State = UIState.HostStarted;
+                            this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
+                        }
+                        catch (WebException ex)
+                        {
+                            this.State = UIState.HostStarted;
+                            this.labelStatusHost.Text = $"To connect to your server: ???.???.???.???:{this.numericUpDown1.Value}";
+                        }
                     }
-                    catch (WebException ex)
+                    else
                     {
                         this.State = UIState.HostStarted;
                         this.labelStatusHost.Text = $"To connect to your server: ???.???.???.???:{this.numericUpDown1.Value}";
@@ -229,7 +246,7 @@ namespace AmongUs_proxy.GUI
                     }
                     this.State = UIState.ClientConnecting;
                     this.labelStatusClient.Text = $"Connecting to {ipAddr}:{portAddr}";
-                    Connection connection = null;
+                    Client connection = null;
                     try
                     {
                         connection = await Client.Connect(ipAddr.ToString(), portAddr);
@@ -262,6 +279,9 @@ namespace AmongUs_proxy.GUI
                         }
                         this.BeginInvoke(new ActionNoParam((ex) =>
                         {
+                            // Might be duplicated excuting with "case UIState.ClientConnected:" below.
+                            // But better safe than sorry.
+
                             if (ex != null)
                             {
                                 MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -291,6 +311,7 @@ namespace AmongUs_proxy.GUI
             var listofIPs = await task_fetchingLANIP;
             if (listofIPs.Length != 0)
             {
+                comboBox1.Items.Add("All Networks");
                 comboBox1.Items.AddRange(listofIPs);
                 if (comboBox1.Text.Length == 0)
                 {
