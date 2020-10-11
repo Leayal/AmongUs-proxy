@@ -31,7 +31,7 @@ namespace AmongUs_proxy
             // Yes, last byte is \0
         }
 
-        private UdpTunnel gameTunnel;
+        private UdpProxy gameTunnel;
         private bool _isRunning;
         private UdpClient broadcastListener;
         private TcpListener broadcastRelay;
@@ -83,15 +83,17 @@ namespace AmongUs_proxy
                 this._firstStart = false;
                 this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
             }
-            this.gameTunnel = new UdpTunnel((IPEndPoint)broadcastRelay.LocalEndpoint, new IPEndPoint(Constants.LanIP, AmongUs.ServerPort));
-            this.gameTunnel.Start();
+            this.gameTunnel = new UdpProxy();
+            // this.gameTunnel = new UdpTunnel((IPEndPoint)broadcastRelay.LocalEndpoint, new IPEndPoint(Constants.LanIP, AmongUs.ServerPort));
+            var bindGameServer = (IPEndPoint)broadcastRelay.LocalEndpoint;
+            this.gameTunnel.Start(Constants.LanIP.ToString(), AmongUs.ServerPort, (ushort)bindGameServer.Port, bindGameServer.Address.ToString());
         }
 
         private async void ListeningForBroadcast(IAsyncResult ar)
         {
             IPEndPoint broadcastEndpoint = new IPEndPoint(IPAddress.Any, AmongUs.BroadcastPort);
             var broadcastPacket = this.broadcastListener.EndReceive(ar, ref broadcastEndpoint);
-            var str = Encoding.UTF8.GetString(broadcastPacket);
+            var str = Encoding.UTF8.GetString(broadcastPacket, 2, broadcastPacket.Length - 2);
             if (str.Length != 0 && str[str.Length - 1] == '~')
             {
                 int index = str.LastIndexOf('~', str.Length - 1);

@@ -21,16 +21,16 @@ namespace AmongUs_proxy
             this._isRunning = false;
         }
 
-        public void Start()
+        public Task Start()
         {
-            if (this._isRunning) return;
+            if (this._isRunning) return null;
             this._isRunning = true;
-            this.CreateTunnelAndRun();
+            return this.CreateTunnelAndRun();
         }
 
-        private void CreateTunnelAndRun()
+        private Task CreateTunnelAndRun()
         {
-            Task.Factory.StartNew(async () =>
+            return Task.Factory.StartNew(async () =>
             {
                 IPEndPoint m_connectedClientEp = null;
 
