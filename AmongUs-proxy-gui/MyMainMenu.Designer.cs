@@ -33,6 +33,7 @@
             this.textBox1 = new System.Windows.Forms.TextBox();
             this.button1 = new System.Windows.Forms.Button();
             this.groupBoxHost = new System.Windows.Forms.GroupBox();
+            this.checkBox1 = new System.Windows.Forms.CheckBox();
             this.labelStatusHost = new System.Windows.Forms.Label();
             this.label2 = new System.Windows.Forms.Label();
             this.textBox2 = new System.Windows.Forms.TextBox();
@@ -45,7 +46,7 @@
             this.button3 = new System.Windows.Forms.Button();
             this.button4 = new System.Windows.Forms.Button();
             this.button5 = new System.Windows.Forms.Button();
-            this.checkBox1 = new System.Windows.Forms.CheckBox();
+            this.checkBox_isolateclient = new System.Windows.Forms.CheckBox();
             this.groupBoxHost.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.numericUpDown1)).BeginInit();
             this.groupBoxClient.SuspendLayout();
@@ -53,7 +54,7 @@
             // 
             // button2
             // 
-            this.button2.Location = new System.Drawing.Point(6, 51);
+            this.button2.Location = new System.Drawing.Point(6, 76);
             this.button2.Name = "button2";
             this.button2.Size = new System.Drawing.Size(289, 23);
             this.button2.TabIndex = 1;
@@ -96,6 +97,18 @@
             this.groupBoxHost.Text = "Hosting";
             this.groupBoxHost.Visible = false;
             // 
+            // checkBox1
+            // 
+            this.checkBox1.AutoSize = true;
+            this.checkBox1.Checked = true;
+            this.checkBox1.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBox1.Location = new System.Drawing.Point(200, 106);
+            this.checkBox1.Name = "checkBox1";
+            this.checkBox1.Size = new System.Drawing.Size(104, 19);
+            this.checkBox1.TabIndex = 10;
+            this.checkBox1.Text = "Show public IP";
+            this.checkBox1.UseVisualStyleBackColor = true;
+            // 
             // labelStatusHost
             // 
             this.labelStatusHost.AutoSize = true;
@@ -104,6 +117,7 @@
             this.labelStatusHost.Size = new System.Drawing.Size(39, 15);
             this.labelStatusHost.TabIndex = 9;
             this.labelStatusHost.Text = "Ready";
+            this.labelStatusHost.Click += new System.EventHandler(this.LabelStatusHost_Click);
             // 
             // label2
             // 
@@ -162,13 +176,14 @@
             // 
             // groupBoxClient
             // 
+            this.groupBoxClient.Controls.Add(this.checkBox_isolateclient);
             this.groupBoxClient.Controls.Add(this.labelStatusClient);
             this.groupBoxClient.Controls.Add(this.label3);
             this.groupBoxClient.Controls.Add(this.button2);
             this.groupBoxClient.Controls.Add(this.textBox1);
             this.groupBoxClient.Location = new System.Drawing.Point(12, 12);
             this.groupBoxClient.Name = "groupBoxClient";
-            this.groupBoxClient.Size = new System.Drawing.Size(304, 100);
+            this.groupBoxClient.Size = new System.Drawing.Size(304, 127);
             this.groupBoxClient.TabIndex = 4;
             this.groupBoxClient.TabStop = false;
             this.groupBoxClient.Text = "Client";
@@ -177,7 +192,7 @@
             // labelStatusClient
             // 
             this.labelStatusClient.AutoSize = true;
-            this.labelStatusClient.Location = new System.Drawing.Point(6, 77);
+            this.labelStatusClient.Location = new System.Drawing.Point(6, 102);
             this.labelStatusClient.Name = "labelStatusClient";
             this.labelStatusClient.Size = new System.Drawing.Size(39, 15);
             this.labelStatusClient.TabIndex = 4;
@@ -223,17 +238,17 @@
             this.button5.Visible = false;
             this.button5.Click += new System.EventHandler(this.button5_Click);
             // 
-            // checkBox1
+            // checkBox_isolateclient
             // 
-            this.checkBox1.AutoSize = true;
-            this.checkBox1.Checked = true;
-            this.checkBox1.CheckState = System.Windows.Forms.CheckState.Checked;
-            this.checkBox1.Location = new System.Drawing.Point(200, 106);
-            this.checkBox1.Name = "checkBox1";
-            this.checkBox1.Size = new System.Drawing.Size(104, 19);
-            this.checkBox1.TabIndex = 10;
-            this.checkBox1.Text = "Show public IP";
-            this.checkBox1.UseVisualStyleBackColor = true;
+            this.checkBox_isolateclient.AutoSize = true;
+            this.checkBox_isolateclient.Checked = true;
+            this.checkBox_isolateclient.CheckState = System.Windows.Forms.CheckState.Checked;
+            this.checkBox_isolateclient.Location = new System.Drawing.Point(42, 51);
+            this.checkBox_isolateclient.Name = "checkBox_isolateclient";
+            this.checkBox_isolateclient.Size = new System.Drawing.Size(212, 19);
+            this.checkBox_isolateclient.TabIndex = 5;
+            this.checkBox_isolateclient.Text = "Isolate the proxy to this device only";
+            this.checkBox_isolateclient.UseVisualStyleBackColor = true;
             // 
             // MyMainMenu
             // 
@@ -281,6 +296,7 @@
         private System.Windows.Forms.Button button4;
         private System.Windows.Forms.Button button5;
         private System.Windows.Forms.CheckBox checkBox1;
+        private System.Windows.Forms.CheckBox checkBox_isolateclient;
     }
 }
 

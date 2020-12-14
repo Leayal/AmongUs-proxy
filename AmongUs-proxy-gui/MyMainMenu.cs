@@ -111,12 +111,14 @@ namespace AmongUs_proxy.GUI
                             this.button5.Visible = true;
                             this.button5.Enabled = true;
                             this.textBox1.Enabled = true;
+                            this.checkBox_isolateclient.Enabled = true;
                             this.button2.Text = "Connect to the proxy server";
                             break;
                         case UIState.ClientConnecting:
                             this.button2.Enabled = false;
                             this.button5.Enabled = false;
                             this.textBox1.Enabled = false;
+                            this.checkBox_isolateclient.Enabled = false;
                             this.button2.Text = "Connecting to the proxy server";
                             break;
                         case UIState.ClientConnected:
@@ -188,10 +190,15 @@ namespace AmongUs_proxy.GUI
                         try
                         {
                             var publicIP = await GetPublicIPAddress();
+                            var ipaddress = $"{publicIP}:{this.numericUpDown1.Value}";
+                            var oldstate = new LbState(this.labelStatusHost.Cursor, ipaddress, this.labelStatusHost.Font);
                             this.State = UIState.HostStarted;
-                            this.labelStatusHost.Text = $"To connect to your server: {publicIP}:{this.numericUpDown1.Value}";
+                            this.labelStatusHost.Text = "To connect to your server: " + ipaddress;
+                            this.labelStatusHost.Tag = oldstate;
+                            this.labelStatusHost.Cursor = Cursors.Hand;
+                            this.labelStatusHost.Font = new Font(this.labelStatusHost.Font, FontStyle.Underline);
                         }
-                        catch (WebException ex)
+                        catch (WebException)
                         {
                             this.State = UIState.HostStarted;
                             this.labelStatusHost.Text = $"To connect to your server: ???.???.???.???:{this.numericUpDown1.Value}";
@@ -211,8 +218,42 @@ namespace AmongUs_proxy.GUI
                         this.hosting.Stop();
                         this.State = UIState.HostReady;
                         this.labelStatusHost.Text = "Ready";
+
+                        if (this.labelStatusHost.Tag is LbState oldstate)
+                        {
+                            this.labelStatusHost.Cursor = oldstate.oldCursor;
+                            var tmpFont = this.labelStatusHost.Font;
+                            this.labelStatusHost.Font = oldstate.oldFont;
+                            if (tmpFont != null)
+                            {
+                                tmpFont.Dispose();
+                            }
+
+                            this.labelStatusHost.Tag = null;
+                        }
                     }
                     break;
+            }
+        }
+
+        readonly struct LbState
+        {
+            public readonly Cursor oldCursor;
+            public readonly string addr;
+            public readonly Font oldFont;
+            public LbState(Cursor cursor, string address, Font font)
+            {
+                this.oldCursor = cursor;
+                this.addr = address;
+                this.oldFont = font;
+            }
+        }
+
+        private void LabelStatusHost_Click(object sender, EventArgs e)
+        {
+            if (sender is Label lb && lb.Tag is LbState addr && !string.IsNullOrWhiteSpace(addr.addr))
+            {
+                Clipboard.SetText(addr.addr, TextDataFormat.Text);
             }
         }
 
@@ -222,6 +263,7 @@ namespace AmongUs_proxy.GUI
             {
                 case UIState.ClientReady:
                     var text = this.textBox1.Text;
+                    var isolateClientToThisMachineOnly = this.checkBox_isolateclient.Checked;
                     if (string.IsNullOrWhiteSpace(text))
                     {
                         MessageBox.Show(this, "Invalid destination.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -249,7 +291,7 @@ namespace AmongUs_proxy.GUI
                     Client connection = null;
                     try
                     {
-                        connection = await Client.Connect(ipAddr.ToString(), portAddr);
+                        connection = await Client.Connect(ipAddr.ToString(), portAddr, isolateClientToThisMachineOnly);
                     }
                     catch (Exception ex)
                     {
@@ -266,37 +308,30 @@ namespace AmongUs_proxy.GUI
                     this.client = connection;
                     this.State = UIState.ClientConnected;
                     this.labelStatusClient.Text = $"You are connected to {ipAddr}:{portAddr}";
-                    _ = connection.WhenConnectionTerminated().ContinueWith(t =>
+
+                    try
                     {
-                        Exception realEx;
-                        if (t.Exception is AggregateException aggregate)
+                        await connection.WhenConnectionTerminated();
+                    }
+                    catch (Exception ex)
+                    {
+                        if (ex is ArgumentOutOfRangeException && string.Equals(ex.Message, "Non-negative number required.\r\nParameter name: value", StringComparison.OrdinalIgnoreCase))
                         {
-                            realEx = aggregate.InnerException;
+                            MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: Proxy server terminated the connection.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
                         else
                         {
-                            realEx = t.Exception;
+                            MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         }
-                        this.BeginInvoke(new ActionNoParam((ex) =>
-                        {
-                            // Might be duplicated excuting with "case UIState.ClientConnected:" below.
-                            // But better safe than sorry.
+                    }
+                    finally
+                    {
+                        this.client = null;
+                        connection.Dispose();
+                        this.State = UIState.ClientReady;
+                        this.labelStatusClient.Text = "Ready";
+                    }
 
-                            if (ex != null)
-                            {
-                                if (ex is ArgumentOutOfRangeException && string.Equals(ex.Message, "Non-negative number required.\r\nParameter name: value", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: Proxy server terminated the connection.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                }
-                                else
-                                {
-                                    MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                                }
-                            }
-                            this.State = UIState.ClientReady;
-                            this.labelStatusClient.Text = "Ready";
-                        }), realEx);
-                    });
                     break;
                 case UIState.ClientConnected:
                     if (this.client != null)
