@@ -284,7 +284,14 @@ namespace AmongUs_proxy.GUI
 
                             if (ex != null)
                             {
-                                MessageBox.Show(this, ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                if (ex is ArgumentOutOfRangeException && string.Equals(ex.Message, "Non-negative number required.\r\nParameter name: value", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: Proxy server terminated the connection.", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                }
+                                else
+                                {
+                                    MessageBox.Show(this, "Disconnected from proxy server.\r\nReason: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                                }
                             }
                             this.State = UIState.ClientReady;
                             this.labelStatusClient.Text = "Ready";

@@ -33,12 +33,11 @@ namespace AmongUs_proxy
 
         private UdpProxy gameTunnel;
         private bool _isRunning;
-        private UdpClient broadcastListener;
         private TcpListener broadcastRelay;
-        private bool _firstStart;
+        private UdpClient broadcastListener;
 
         /// <summary>
-        /// [4][2][${RoomName}][~Open~${users}~]
+        /// [4][2][${RoomName}][~Open~${user_count}~]
         /// </summary>
         private string _game_name;
         private long _player_count;
@@ -46,11 +45,9 @@ namespace AmongUs_proxy
         public Host()
         {
             this._isRunning = false;
-            this._firstStart = true;
-            this._game_name = "LeaAmongUsProxy"; // string.Empty;
+            this._game_name = string.Empty;
             this._player_count = 0;
-            this.broadcastListener = new UdpClient();
-            this.broadcastListener.Connect(IPAddress.Broadcast, AmongUs.BroadcastPort);
+            this.gameTunnel = new UdpProxy();
         }
 
         public string GameName
@@ -75,39 +72,88 @@ namespace AmongUs_proxy
                 throw new ArgumentOutOfRangeException(nameof(localPort), "Provided Port is not valid.");
             }
             this._isRunning = true;
+
             this.broadcastRelay = new TcpListener(validIp, localPort);
             this.broadcastRelay.Start();
             this.broadcastRelay.BeginAcceptTcpClient(this.AcceptingTcpClient, broadcastRelay);
-            if (this._firstStart)
+
+            if (this.broadcastListener != null)
             {
-                this._firstStart = false;
-                this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
+                this.broadcastListener.Close();
+                this.broadcastListener.Dispose();
             }
-            this.gameTunnel = new UdpProxy();
+
+            this.broadcastListener = new UdpClient()
+            {
+                ExclusiveAddressUse = false
+            };
+            this.broadcastListener.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            this.broadcastListener.Client.Bind(new IPEndPoint(IPAddress.Any, AmongUs.BroadcastPort));
+            this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
+
             // this.gameTunnel = new UdpTunnel((IPEndPoint)broadcastRelay.LocalEndpoint, new IPEndPoint(Constants.LanIP, AmongUs.ServerPort));
             var bindGameServer = (IPEndPoint)broadcastRelay.LocalEndpoint;
-            this.gameTunnel.Start(Constants.LanIP.ToString(), AmongUs.ServerPort, (ushort)bindGameServer.Port, bindGameServer.Address.ToString());
+            _ = this.gameTunnel.Start(Constants.LanIP.ToString(), AmongUs.ServerPort, (ushort)bindGameServer.Port, bindGameServer.Address.ToString());
         }
 
         private async void ListeningForBroadcast(IAsyncResult ar)
         {
-            IPEndPoint broadcastEndpoint = new IPEndPoint(IPAddress.Any, AmongUs.BroadcastPort);
-            var broadcastPacket = this.broadcastListener.EndReceive(ar, ref broadcastEndpoint);
-            var str = Encoding.UTF8.GetString(broadcastPacket, 2, broadcastPacket.Length - 2);
-            if (str.Length != 0 && str[str.Length - 1] == '~')
+            if (this.broadcastListener == null)
             {
-                int index = str.LastIndexOf('~', str.Length - 1);
-                if (index != -1)
+                // Object disposed;
+                return;
+            }
+            try
+            {
+                var receivedEnd = new IPEndPoint(IPAddress.Any, AmongUs.BroadcastPort);
+                var buffer = this.broadcastListener.EndReceive(ar, ref receivedEnd);
+                if (buffer.Length == 0)
                 {
-                    index += 1;
-                    if (int.TryParse(str.Substring(index, str.Length - 1 - index), out var playerCount))
+                    if (this.broadcastListener != null)
                     {
-                        Interlocked.Exchange(ref this._player_count, playerCount);
+                        this.broadcastListener.Close();
+                        this.broadcastListener.Dispose();
+                        this.broadcastListener = null;
+                    }
+                    return;
+                }
+                var str = Encoding.UTF8.GetString(buffer, 2, buffer.Length - 2);
+                if (str.Length != 0 && str[str.Length - 1] == '~')
+                {
+                    int index = str.LastIndexOf("~open~", StringComparison.OrdinalIgnoreCase);
+                    if (index != -1)
+                    {
+                        index += 6;
+                        var taaa = str.Substring(index, str.Length - 1 - index);
+                        if (int.TryParse(str.Substring(index, str.Length - 1 - index), out var playerCount))
+                        {
+                            Interlocked.Exchange(ref this._player_count, playerCount);
+                        }
                     }
                 }
+                await Task.Delay(100);
+                this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
             }
-            await Task.Delay(100);
-            this.broadcastListener.BeginReceive(this.ListeningForBroadcast, null);
+            catch (ObjectDisposedException) { }
+            catch (InvalidOperationException)
+            {
+                if (this.broadcastListener != null)
+                {
+                    this.broadcastListener.Close();
+                    this.broadcastListener.Dispose();
+                    this.broadcastListener = null;
+                }
+            }
+            catch (SocketException)
+            {
+                if (this.broadcastListener != null)
+                {
+                    this.broadcastListener.Close();
+                    this.broadcastListener.Dispose();
+                    this.broadcastListener = null;
+                }
+            }
+            // Other exception won't be handled for error message.
         }
 
         private void AcceptingTcpClient(IAsyncResult ar)
@@ -190,6 +236,13 @@ namespace AmongUs_proxy
             this._isRunning = false;
             this.gameTunnel.Stop();
             this.broadcastRelay.Stop();
+
+            if (this.broadcastListener != null)
+            {
+                this.broadcastListener.Close();
+                this.broadcastListener.Dispose();
+                this.broadcastListener = null;
+            }
         }
     }
 }
